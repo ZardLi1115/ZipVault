@@ -17,8 +17,13 @@ export async function listRepos() {
   return data;
 }
 
-export async function createRepo(name) {
-  const { data } = await api.post("/repos", { name });
+export async function createRepo(name, description) {
+  const { data } = await api.post("/repos", { name, description });
+  return data;
+}
+
+export async function updateRepoDescription(repoId, description) {
+  const { data } = await api.patch(`/repos/${encodeURIComponent(repoId)}`, { description });
   return data;
 }
 

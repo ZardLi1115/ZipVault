@@ -15,6 +15,7 @@ Upload a project folder as a ZIP file, write a version note, and ZipVault record
 - **ZIP workflow / ZIP 工作流**: version a folder by uploading ZIP archives instead of learning Git commands.
 - **Safe rollback / 安全回滚**: rollback creates a new commit instead of deleting history.
 - **Custom version labels / 自定义版本号**: attach and edit human-friendly version numbers without changing Git hashes.
+- **Repository descriptions / 仓库描述**: add and edit descriptions for each local Git repository.
 - **Soft delete records / 删除版本记录**: hide a version from the UI without rewriting Git history.
 - **Branch and merge support / 分支与合并**: create, switch, delete, and merge branches locally.
 - **Conflict guidance / 冲突解决引导**: resolve merge conflicts with a structured interface instead of raw conflict markers.
@@ -140,6 +141,7 @@ npm start            # Start backend
 
 - `POST /api/repos` - create a local repository / 创建本地仓库
 - `GET /api/repos` - list repositories / 列出仓库
+- `PATCH /api/repos/:id` - edit repository description / 修改仓库描述
 - `POST /api/repos/:id/commit` - upload ZIP and create version / 上传 ZIP 并创建版本
 - `GET /api/repos/:id/commits` - list version history / 查看版本历史
 - `PATCH /api/repos/:id/commits/:hash/version` - edit custom version label / 修改自定义版本号

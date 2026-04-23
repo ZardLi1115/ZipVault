@@ -22,3 +22,21 @@ export async function upsertRepo(repo) {
   await writeRepoIndex(next);
   return repo;
 }
+
+export async function updateRepo(repoId, fields) {
+  const repos = await readRepoIndex();
+  const index = repos.findIndex((repo) => repo.id === repoId);
+  if (index === -1) {
+    return null;
+  }
+
+  const nextRepo = {
+    ...repos[index],
+    ...fields,
+    updatedAt: new Date().toISOString()
+  };
+  const next = [...repos];
+  next[index] = nextRepo;
+  await writeRepoIndex(next);
+  return nextRepo;
+}

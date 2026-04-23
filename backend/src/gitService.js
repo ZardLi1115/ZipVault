@@ -8,7 +8,7 @@ import unzipper from "unzipper";
 import { pipeline } from "node:stream/promises";
 import { dataRoot, reposRoot, tmpRoot } from "./config.js";
 import { HttpError } from "./errors.js";
-import { readRepoIndex, upsertRepo } from "./dataStore.js";
+import { readRepoIndex, updateRepo, upsertRepo } from "./dataStore.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -58,6 +58,10 @@ function assertMessage(message) {
 
 function cleanVersionLabel(version) {
   return String(version || "").trim().slice(0, 80);
+}
+
+function cleanRepoDescription(description) {
+  return String(description || "").trim().slice(0, 500);
 }
 
 async function readVersionMeta(id) {
@@ -220,7 +224,7 @@ async function gitShow(repoPath, hash, filePath) {
   }
 }
 
-export async function createRepo(name) {
+export async function createRepo(name, description) {
   const cleanName = String(name || "").trim();
   if (!cleanName) {
     throw new HttpError(400, "仓库名称不能为空");
@@ -238,6 +242,7 @@ export async function createRepo(name) {
   return upsertRepo({
     id,
     name: cleanName,
+    description: cleanRepoDescription(description),
     createdAt: new Date().toISOString()
   });
 }
@@ -251,6 +256,15 @@ export async function listRepos() {
     }
   }
   return existing;
+}
+
+export async function updateRepoDescription(id, description) {
+  await ensureRepo(id);
+  const repo = await updateRepo(id, { description: cleanRepoDescription(description) });
+  if (!repo) {
+    throw new HttpError(404, "仓库不存在");
+  }
+  return repo;
 }
 
 export async function commitZip(id, zipPath, message, version) {

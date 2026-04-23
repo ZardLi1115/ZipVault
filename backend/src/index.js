@@ -24,7 +24,8 @@ import {
   mergeBranch,
   resolveConflicts,
   revertToVersion,
-  updateCommitVersion
+  updateCommitVersion,
+  updateRepoDescription
 } from "./gitService.js";
 
 await fs.ensureDir(reposRoot);
@@ -61,7 +62,14 @@ app.get(
 app.post(
   "/api/repos",
   asyncRoute(async (req, res) => {
-    res.status(201).json(await createRepo(req.body?.name));
+    res.status(201).json(await createRepo(req.body?.name, req.body?.description));
+  })
+);
+
+app.patch(
+  "/api/repos/:id",
+  asyncRoute(async (req, res) => {
+    res.json(await updateRepoDescription(req.params.id, req.body?.description));
   })
 );
 
