@@ -72,6 +72,10 @@ function cleanVersionMetric(metric) {
   return number;
 }
 
+function cleanVersionNote(note) {
+  return String(note ?? "").trim().slice(0, 5000);
+}
+
 function cleanRepoDescription(description) {
   return String(description || "").trim().slice(0, 500);
 }
@@ -79,17 +83,19 @@ function cleanRepoDescription(description) {
 async function readVersionMeta(id) {
   const metaPath = versionMetaPath(id);
   if (!(await fs.pathExists(metaPath))) {
-    return { labels: {}, hidden: [] };
+    return { labels: {}, metrics: {}, notes: {}, times: {}, hidden: [] };
   }
   const raw = await fs.readJson(metaPath);
   if (raw.labels || raw.hidden) {
     return {
       labels: raw.labels || {},
       metrics: raw.metrics || {},
+      notes: raw.notes || {},
+      times: raw.times || {},
       hidden: raw.hidden || []
     };
   }
-  return { labels: raw, metrics: {}, hidden: [] };
+  return { labels: raw, metrics: {}, notes: {}, times: {}, hidden: [] };
 }
 
 async function writeVersionMeta(id, meta) {
@@ -137,9 +143,17 @@ async function setVersionMetric(id, hash, metric) {
   return value;
 }
 
-async function updateVersionMeta(id, hash, version, metric) {
+async function setVersionTime(id, hash, time) {
+  const meta = await readVersionMeta(id);
+  meta.times[hash] = time;
+  await writeVersionMeta(id, meta);
+  return time;
+}
+
+async function updateVersionMeta(id, hash, version, metric, note) {
   const label = cleanVersionLabel(version);
   const metricValue = cleanVersionMetric(metric);
+  const noteValue = cleanVersionNote(note);
   const meta = await readVersionMeta(id);
   if (label) {
     meta.labels[hash] = label;
@@ -151,8 +165,13 @@ async function updateVersionMeta(id, hash, version, metric) {
   } else {
     meta.metrics[hash] = metricValue;
   }
+  if (noteValue) {
+    meta.notes[hash] = noteValue;
+  } else {
+    delete meta.notes[hash];
+  }
   await writeVersionMeta(id, meta);
-  return { version: label, metric: metricValue };
+  return { version: label, metric: metricValue, message: noteValue };
 }
 
 async function assertCommitExists(repoPath, hash) {
@@ -342,9 +361,11 @@ export async function commitZip(id, zipPath, message, version, metric) {
     const status = await repoGit.status();
     await createCommit(repoPath, commitMessage, status.isClean());
     const hash = (await repoGit.revparse(["HEAD"])).trim();
+    const time = new Date(Number((await repoGit.raw(["show", "-s", "--format=%ct", hash])).trim()) * 1000).toISOString();
     const versionLabel = await setVersionLabel(id, hash, version);
     const metricValue = await setVersionMetric(id, hash, metric);
-    return { hash, version: versionLabel, metric: metricValue };
+    await setVersionTime(id, hash, time);
+    return { hash, version: versionLabel, metric: metricValue, time };
   } finally {
     await fs.remove(extractRoot);
     await fs.remove(zipPath).catch(() => {});
@@ -359,11 +380,18 @@ export async function getCommits(id, branch = "HEAD") {
   const raw = await git(repoPath).raw(["log", ref, "--pretty=format:%H%x1f%h%x1f%ct%x1f%B%x1e"]);
   const records = raw.split("\x1e").filter((record) => record.trim());
   const commits = [];
+  let didBackfillTimes = false;
 
   for (const record of records) {
     const [hash, shortHash, timestamp, ...messageParts] = record.replace(/^\n+|\n+$/g, "").split("\x1f");
     if (hidden.has(hash)) {
       continue;
+    }
+    const originalMessage = messageParts.join("\x1f");
+    const logTime = new Date(Number(timestamp) * 1000).toISOString();
+    if (!versionMeta.times[hash]) {
+      versionMeta.times[hash] = logTime;
+      didBackfillTimes = true;
     }
     commits.push({
       hash,
@@ -371,10 +399,15 @@ export async function getCommits(id, branch = "HEAD") {
       version: versionMeta.labels[hash] || "",
       metric: versionMeta.metrics[hash] ?? null,
       metricDelta: null,
-      message: messageParts.join("\x1f"),
-      time: new Date(Number(timestamp) * 1000).toISOString(),
+      message: versionMeta.notes[hash] || originalMessage,
+      originalMessage,
+      time: versionMeta.times[hash],
       summary: await commitSummary(repoPath, hash)
     });
+  }
+
+  if (didBackfillTimes) {
+    await writeVersionMeta(id, versionMeta);
   }
 
   let previousMetric = 0;
@@ -389,10 +422,10 @@ export async function getCommits(id, branch = "HEAD") {
   return commits;
 }
 
-export async function updateCommitVersion(id, hash, version, metric) {
+export async function updateCommitVersion(id, hash, version, metric, note) {
   const repoPath = await ensureRepo(id);
   await assertCommitExists(repoPath, hash);
-  const meta = await updateVersionMeta(id, hash, version, metric);
+  const meta = await updateVersionMeta(id, hash, version, metric, note);
   return { hash, ...meta };
 }
 

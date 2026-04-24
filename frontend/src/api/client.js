@@ -42,8 +42,8 @@ export async function listCommits(repoId, branch) {
   return data;
 }
 
-export async function updateCommitVersion(repoId, hash, version, metric) {
-  const { data } = await api.patch(`/repos/${encodeURIComponent(repoId)}/commits/${encodeURIComponent(hash)}/version`, { version, metric });
+export async function updateCommitVersion(repoId, hash, version, metric, message) {
+  const { data } = await api.patch(`/repos/${encodeURIComponent(repoId)}/commits/${encodeURIComponent(hash)}/version`, { version, metric, message });
   return data;
 }
 

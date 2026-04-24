@@ -94,7 +94,7 @@ app.get(
 app.patch(
   "/api/repos/:id/commits/:hash/version",
   asyncRoute(async (req, res) => {
-    res.json(await updateCommitVersion(req.params.id, req.params.hash, req.body?.version, req.body?.metric));
+    res.json(await updateCommitVersion(req.params.id, req.params.hash, req.body?.version, req.body?.metric, req.body?.message));
   })
 );
 

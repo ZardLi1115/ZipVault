@@ -37,6 +37,7 @@ export default function HistoryPage() {
   const [editingHash, setEditingHash] = useState("");
   const [editingVersion, setEditingVersion] = useState("");
   const [editingMetric, setEditingMetric] = useState("");
+  const [editingMessage, setEditingMessage] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -94,10 +95,11 @@ export default function HistoryPage() {
 
   async function saveVersion(hash) {
     try {
-      await updateCommitVersion(repoId, hash, editingVersion, editingMetric);
+      await updateCommitVersion(repoId, hash, editingVersion, editingMetric, editingMessage);
       setEditingHash("");
       setEditingVersion("");
       setEditingMetric("");
+      setEditingMessage("");
       toast.success("版本信息已更新");
       await load();
     } catch (error) {
@@ -160,7 +162,7 @@ export default function HistoryPage() {
             step="any"
             value={metric}
             onChange={(event) => setMetric(event.target.value)}
-            placeholder="指标项，可不填"
+            placeholder="准确率，可不填"
           />
           <textarea
             className="input min-h-24 resize-y"
@@ -180,7 +182,7 @@ export default function HistoryPage() {
           return (
             <article key={commit.hash} className="card">
               <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                <div>
+                <div className="min-w-0 flex-1">
                   <div className="text-sm text-stone-500">{new Date(commit.time).toLocaleString()}</div>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     {editingHash === commit.hash ? (
@@ -197,7 +199,7 @@ export default function HistoryPage() {
                           step="any"
                           value={editingMetric}
                           onChange={(event) => setEditingMetric(event.target.value)}
-                          placeholder="指标项"
+                          placeholder="准确率"
                         />
                         <button className="btn-primary" onClick={() => saveVersion(commit.hash)}>
                           保存
@@ -207,6 +209,7 @@ export default function HistoryPage() {
                           onClick={() => {
                             setEditingHash("");
                             setEditingMetric("");
+                            setEditingMessage("");
                           }}
                         >
                           取消
@@ -221,6 +224,7 @@ export default function HistoryPage() {
                             setEditingHash(commit.hash);
                             setEditingVersion(commit.version || "");
                             setEditingMetric(commit.metric ?? "");
+                            setEditingMessage(commit.message || "");
                           }}
                         >
                           <Pencil className="h-4 w-4" />
@@ -229,11 +233,20 @@ export default function HistoryPage() {
                       </>
                     )}
                   </div>
-                  <h2 className="mt-1 whitespace-pre-wrap break-words text-lg font-semibold leading-relaxed">{commit.message}</h2>
+                  {editingHash === commit.hash ? (
+                    <textarea
+                      className="input mt-3 min-h-32 resize-y whitespace-pre-wrap text-lg font-semibold leading-relaxed"
+                      value={editingMessage}
+                      onChange={(event) => setEditingMessage(event.target.value)}
+                      placeholder="版本备注"
+                    />
+                  ) : (
+                    <h2 className="mt-1 whitespace-pre-wrap break-words text-lg font-semibold leading-relaxed">{commit.message}</h2>
+                  )}
                   <div className="mt-2 flex flex-wrap gap-2 text-sm">
                     <span className="badge">{formatSummary(commit.summary)}</span>
                     <span className="badge">
-                      指标 {commit.metric === null ? "未设置" : commit.metric}
+                      准确率 {commit.metric === null ? "未设置" : commit.metric}
                       {commit.metric === null ? "" : `（较上次 ${formatMetricDelta(commit.metricDelta)}）`}
                     </span>
                     <button
