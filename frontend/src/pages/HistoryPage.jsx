@@ -18,16 +18,25 @@ function formatSummary(summary) {
   return `新增 ${summary.added} / 修改 ${summary.modified} / 删除 ${summary.deleted}`;
 }
 
+function formatMetricDelta(delta) {
+  if (delta === null || delta === undefined) {
+    return "";
+  }
+  return delta > 0 ? `+${delta}` : String(delta);
+}
+
 export default function HistoryPage() {
   const { repoId } = useParams();
   const [commits, setCommits] = useState([]);
   const [branches, setBranches] = useState(null);
   const [version, setVersion] = useState("");
+  const [metric, setMetric] = useState("");
   const [message, setMessage] = useState("");
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [editingHash, setEditingHash] = useState("");
   const [editingVersion, setEditingVersion] = useState("");
+  const [editingMetric, setEditingMetric] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -58,9 +67,10 @@ export default function HistoryPage() {
     if (!file || !message.trim()) return;
     setUploading(true);
     try {
-      await uploadCommit(repoId, file, message, version);
+      await uploadCommit(repoId, file, message, version, metric);
       setFile(null);
       setVersion("");
+      setMetric("");
       setMessage("");
       toast.success("版本已提交");
       await load();
@@ -84,10 +94,11 @@ export default function HistoryPage() {
 
   async function saveVersion(hash) {
     try {
-      await updateCommitVersion(repoId, hash, editingVersion);
+      await updateCommitVersion(repoId, hash, editingVersion, editingMetric);
       setEditingHash("");
       setEditingVersion("");
-      toast.success("版本号已更新");
+      setEditingMetric("");
+      toast.success("版本信息已更新");
       await load();
     } catch (error) {
       toast.error(error.message);
@@ -136,7 +147,7 @@ export default function HistoryPage() {
           <UploadCloud className="h-8 w-8 text-moss" />
           <div className="mt-2 text-sm font-medium">{file ? file.name : "拖拽或点击选择 ZIP"}</div>
         </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-[180px_1fr_160px]">
+        <div className="mt-4 grid gap-3 md:grid-cols-[160px_160px_1fr_160px]">
           <input
             className="input"
             value={version}
@@ -145,6 +156,14 @@ export default function HistoryPage() {
           />
           <input
             className="input"
+            type="number"
+            step="any"
+            value={metric}
+            onChange={(event) => setMetric(event.target.value)}
+            placeholder="指标项，可不填"
+          />
+          <textarea
+            className="input min-h-24 resize-y"
             value={message}
             onChange={(event) => setMessage(event.target.value)}
             placeholder="版本备注"
@@ -172,10 +191,24 @@ export default function HistoryPage() {
                           onChange={(event) => setEditingVersion(event.target.value)}
                           placeholder="版本号"
                         />
+                        <input
+                          className="input max-w-48"
+                          type="number"
+                          step="any"
+                          value={editingMetric}
+                          onChange={(event) => setEditingMetric(event.target.value)}
+                          placeholder="指标项"
+                        />
                         <button className="btn-primary" onClick={() => saveVersion(commit.hash)}>
                           保存
                         </button>
-                        <button className="btn-secondary" onClick={() => setEditingHash("")}>
+                        <button
+                          className="btn-secondary"
+                          onClick={() => {
+                            setEditingHash("");
+                            setEditingMetric("");
+                          }}
+                        >
                           取消
                         </button>
                       </>
@@ -187,17 +220,22 @@ export default function HistoryPage() {
                           onClick={() => {
                             setEditingHash(commit.hash);
                             setEditingVersion(commit.version || "");
+                            setEditingMetric(commit.metric ?? "");
                           }}
                         >
                           <Pencil className="h-4 w-4" />
-                          修改版本号
+                          修改版本信息
                         </button>
                       </>
                     )}
                   </div>
-                  <h2 className="mt-1 break-words text-lg font-semibold">{commit.message}</h2>
+                  <h2 className="mt-1 whitespace-pre-wrap break-words text-lg font-semibold leading-relaxed">{commit.message}</h2>
                   <div className="mt-2 flex flex-wrap gap-2 text-sm">
                     <span className="badge">{formatSummary(commit.summary)}</span>
+                    <span className="badge">
+                      指标 {commit.metric === null ? "未设置" : commit.metric}
+                      {commit.metric === null ? "" : `（较上次 ${formatMetricDelta(commit.metricDelta)}）`}
+                    </span>
                     <button
                       className="badge font-mono"
                       onClick={() => navigator.clipboard.writeText(commit.hash)}

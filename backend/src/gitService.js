@@ -60,6 +60,18 @@ function cleanVersionLabel(version) {
   return String(version || "").trim().slice(0, 80);
 }
 
+function cleanVersionMetric(metric) {
+  const value = String(metric ?? "").trim();
+  if (!value) {
+    return null;
+  }
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    throw new HttpError(400, "指标项必须是数字");
+  }
+  return number;
+}
+
 function cleanRepoDescription(description) {
   return String(description || "").trim().slice(0, 500);
 }
@@ -73,16 +85,32 @@ async function readVersionMeta(id) {
   if (raw.labels || raw.hidden) {
     return {
       labels: raw.labels || {},
+      metrics: raw.metrics || {},
       hidden: raw.hidden || []
     };
   }
-  return { labels: raw, hidden: [] };
+  return { labels: raw, metrics: {}, hidden: [] };
 }
 
 async function writeVersionMeta(id, meta) {
   const metaPath = versionMetaPath(id);
   await fs.ensureDir(path.dirname(metaPath));
   await fs.writeJson(metaPath, meta, { spaces: 2 });
+}
+
+async function createCommit(repoPath, message, allowEmpty = false) {
+  const messagePath = path.join(tmpRoot, "commit-messages", `${crypto.randomUUID()}.txt`);
+  await fs.ensureDir(path.dirname(messagePath));
+  await fs.writeFile(messagePath, message, "utf8");
+  try {
+    const args = ["-C", repoPath, "commit", "-F", messagePath];
+    if (allowEmpty) {
+      args.splice(3, 0, "--allow-empty");
+    }
+    await execFileAsync("git", args);
+  } finally {
+    await fs.remove(messagePath).catch(() => {});
+  }
 }
 
 async function setVersionLabel(id, hash, version) {
@@ -95,6 +123,36 @@ async function setVersionLabel(id, hash, version) {
   }
   await writeVersionMeta(id, meta);
   return label;
+}
+
+async function setVersionMetric(id, hash, metric) {
+  const value = cleanVersionMetric(metric);
+  const meta = await readVersionMeta(id);
+  if (value === null) {
+    delete meta.metrics[hash];
+  } else {
+    meta.metrics[hash] = value;
+  }
+  await writeVersionMeta(id, meta);
+  return value;
+}
+
+async function updateVersionMeta(id, hash, version, metric) {
+  const label = cleanVersionLabel(version);
+  const metricValue = cleanVersionMetric(metric);
+  const meta = await readVersionMeta(id);
+  if (label) {
+    meta.labels[hash] = label;
+  } else {
+    delete meta.labels[hash];
+  }
+  if (metricValue === null) {
+    delete meta.metrics[hash];
+  } else {
+    meta.metrics[hash] = metricValue;
+  }
+  await writeVersionMeta(id, meta);
+  return { version: label, metric: metricValue };
 }
 
 async function assertCommitExists(repoPath, hash) {
@@ -267,7 +325,7 @@ export async function updateRepoDescription(id, description) {
   return repo;
 }
 
-export async function commitZip(id, zipPath, message, version) {
+export async function commitZip(id, zipPath, message, version, metric) {
   const repoPath = await ensureRepo(id);
   await assertCleanForOperation(repoPath);
   const commitMessage = assertMessage(message);
@@ -282,14 +340,11 @@ export async function commitZip(id, zipPath, message, version) {
     const repoGit = git(repoPath);
     await repoGit.add(["-A"]);
     const status = await repoGit.status();
-    if (status.isClean()) {
-      await repoGit.raw(["commit", "--allow-empty", "-m", commitMessage]);
-    } else {
-      await repoGit.commit(commitMessage);
-    }
+    await createCommit(repoPath, commitMessage, status.isClean());
     const hash = (await repoGit.revparse(["HEAD"])).trim();
     const versionLabel = await setVersionLabel(id, hash, version);
-    return { hash, version: versionLabel };
+    const metricValue = await setVersionMetric(id, hash, metric);
+    return { hash, version: versionLabel, metric: metricValue };
   } finally {
     await fs.remove(extractRoot);
     await fs.remove(zipPath).catch(() => {});
@@ -301,12 +356,12 @@ export async function getCommits(id, branch = "HEAD") {
   const ref = branch || "HEAD";
   const versionMeta = await readVersionMeta(id);
   const hidden = new Set(versionMeta.hidden);
-  const raw = await git(repoPath).raw(["log", ref, "--pretty=format:%H%x1f%h%x1f%ct%x1f%s"]);
-  const lines = raw.split("\n").filter(Boolean);
+  const raw = await git(repoPath).raw(["log", ref, "--pretty=format:%H%x1f%h%x1f%ct%x1f%B%x1e"]);
+  const records = raw.split("\x1e").filter((record) => record.trim());
   const commits = [];
 
-  for (const line of lines) {
-    const [hash, shortHash, timestamp, ...messageParts] = line.split("\x1f");
+  for (const record of records) {
+    const [hash, shortHash, timestamp, ...messageParts] = record.replace(/^\n+|\n+$/g, "").split("\x1f");
     if (hidden.has(hash)) {
       continue;
     }
@@ -314,20 +369,31 @@ export async function getCommits(id, branch = "HEAD") {
       hash,
       shortHash,
       version: versionMeta.labels[hash] || "",
+      metric: versionMeta.metrics[hash] ?? null,
+      metricDelta: null,
       message: messageParts.join("\x1f"),
       time: new Date(Number(timestamp) * 1000).toISOString(),
       summary: await commitSummary(repoPath, hash)
     });
   }
 
+  let previousMetric = 0;
+  for (const commit of commits.slice().reverse()) {
+    if (commit.metric === null) {
+      continue;
+    }
+    commit.metricDelta = commit.metric - previousMetric;
+    previousMetric = commit.metric;
+  }
+
   return commits;
 }
 
-export async function updateCommitVersion(id, hash, version) {
+export async function updateCommitVersion(id, hash, version, metric) {
   const repoPath = await ensureRepo(id);
   await assertCommitExists(repoPath, hash);
-  const label = await setVersionLabel(id, hash, version);
-  return { hash, version: label };
+  const meta = await updateVersionMeta(id, hash, version, metric);
+  return { hash, ...meta };
 }
 
 export async function hideCommit(id, hash) {

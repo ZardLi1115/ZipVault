@@ -27,11 +27,12 @@ export async function updateRepoDescription(repoId, description) {
   return data;
 }
 
-export async function uploadCommit(repoId, file, message, version) {
+export async function uploadCommit(repoId, file, message, version, metric) {
   const form = new FormData();
   form.append("file", file);
   form.append("message", message);
   form.append("version", version);
+  form.append("metric", metric);
   const { data } = await api.post(`/repos/${encodeURIComponent(repoId)}/commit`, form);
   return data;
 }
@@ -41,8 +42,8 @@ export async function listCommits(repoId, branch) {
   return data;
 }
 
-export async function updateCommitVersion(repoId, hash, version) {
-  const { data } = await api.patch(`/repos/${encodeURIComponent(repoId)}/commits/${encodeURIComponent(hash)}/version`, { version });
+export async function updateCommitVersion(repoId, hash, version, metric) {
+  const { data } = await api.patch(`/repos/${encodeURIComponent(repoId)}/commits/${encodeURIComponent(hash)}/version`, { version, metric });
   return data;
 }
 

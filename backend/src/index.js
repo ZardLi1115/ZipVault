@@ -80,7 +80,7 @@ app.post(
     if (!req.file) {
       throw new HttpError(400, "请上传 ZIP 文件");
     }
-    res.status(201).json(await commitZip(req.params.id, req.file.path, req.body?.message, req.body?.version));
+    res.status(201).json(await commitZip(req.params.id, req.file.path, req.body?.message, req.body?.version, req.body?.metric));
   })
 );
 
@@ -94,7 +94,7 @@ app.get(
 app.patch(
   "/api/repos/:id/commits/:hash/version",
   asyncRoute(async (req, res) => {
-    res.json(await updateCommitVersion(req.params.id, req.params.hash, req.body?.version));
+    res.json(await updateCommitVersion(req.params.id, req.params.hash, req.body?.version, req.body?.metric));
   })
 );
 
