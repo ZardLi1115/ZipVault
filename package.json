@@ -2,6 +2,7 @@
   "name": "zipvault",
   "private": true,
   "version": "1.0.0",
+  "author": "ZardLi1115",
   "description": "Local ZIP-based visual version management tool.",
   "workspaces": [
     "backend",

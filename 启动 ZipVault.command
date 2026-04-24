@@ -12,10 +12,10 @@ fi
 
 echo "正在启动 ZipVault..."
 
-PORT=3001 node backend/src/index.js &
+npm run start --workspace backend &
 BACKEND_PID=$!
 
-./node_modules/.bin/vite --host 0.0.0.0 --port 3000 --config frontend/vite.config.js &
+npm run dev --workspace frontend &
 FRONTEND_PID=$!
 
 cleanup() {
